@@ -2,21 +2,293 @@
 <meta http-equiv="Content-Type" content="text/html;charset=UTF-8">
 <html>
 <head>
-  <title>DuckHuntJS</title>
+  <title>DuckHuntJS - Elimination Mode</title>
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="description" content="An open source, web based, responsive implementation of Duck Hunt in canvas or webgl depending on your client.">
-  <meta name="author" content="Matt Surabian">
+  <meta name="description" content="DuckHunt JS — Elimination Mode. Paste a name list, last surviving duck wins.">
+  <meta name="author" content="Matt Surabian (original), N3 (elimination mode)">
   <style>
     body {
-      overflow:hidden;
+      overflow: hidden;
       margin: 0;
       padding: 0;
       background-color: #000000;
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      color: #fff;
+    }
+
+    /* ---------- Setup screen ---------- */
+    #setup-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      background: linear-gradient(180deg, #1e3c72 0%, #2a5298 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px;
+      box-sizing: border-box;
+      overflow: auto;
+    }
+    #setup-screen .panel {
+      width: 100%;
+      max-width: 560px;
+      background: rgba(0,0,0,0.55);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 12px;
+      padding: 28px 32px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+    }
+    #setup-screen h1 {
+      margin: 0 0 4px;
+      font-size: 28px;
+      letter-spacing: 1px;
+    }
+    #setup-screen h1 .accent {
+      color: #ffcc00;
+    }
+    #setup-screen p.subtitle {
+      margin: 0 0 18px;
+      opacity: 0.85;
+      font-size: 14px;
+    }
+    #setup-screen label {
+      display: block;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin: 12px 0 6px;
+      opacity: 0.85;
+    }
+    #names-input {
+      width: 100%;
+      min-height: 200px;
+      padding: 10px 12px;
+      border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.3);
+      background: rgba(0,0,0,0.4);
+      color: #fff;
+      font-family: 'Menlo', 'Consolas', monospace;
+      font-size: 14px;
+      box-sizing: border-box;
+      resize: vertical;
+    }
+    #names-input:focus {
+      outline: none;
+      border-color: #ffcc00;
+    }
+    .options-row {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+    .options-row label {
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      text-transform: none;
+      letter-spacing: 0;
+      font-size: 14px;
+    }
+    #name-count {
+      margin-top: 10px;
+      font-size: 13px;
+      opacity: 0.8;
+    }
+    .button-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 22px;
+      flex-wrap: wrap;
+    }
+    .btn {
+      padding: 12px 20px;
+      border: none;
+      border-radius: 6px;
+      font-size: 15px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: transform 0.1s ease, opacity 0.2s ease;
+    }
+    .btn:hover { transform: translateY(-1px); }
+    .btn:active { transform: translateY(0); }
+    .btn-primary {
+      background: #ffcc00;
+      color: #222;
+    }
+    .btn-primary:disabled {
+      background: #555;
+      color: #aaa;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .btn-secondary {
+      background: rgba(255,255,255,0.15);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.3);
+    }
+    .design-note {
+      margin-top: 18px;
+      font-size: 12px;
+      opacity: 0.6;
+      line-height: 1.5;
+    }
+
+    /* ---------- In-game UI overlays ---------- */
+    #elimination-panel {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      z-index: 500;
+      background: rgba(0,0,0,0.55);
+      color: #fff;
+      padding: 10px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      max-width: 220px;
+      max-height: 70vh;
+      overflow-y: auto;
+      border: 1px solid rgba(255,255,255,0.15);
+      display: none;
+    }
+    #elimination-panel h3 {
+      margin: 0 0 6px;
+      font-size: 13px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: #ffcc00;
+    }
+    #survivors-count {
+      font-size: 14px;
+      font-weight: bold;
+      margin-bottom: 8px;
+    }
+    #eliminated-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    #eliminated-list li {
+      padding: 3px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      font-size: 13px;
+      opacity: 0.85;
+    }
+    #eliminated-list li:last-child {
+      border-bottom: none;
+    }
+    #eliminated-list li .order {
+      color: #ffcc00;
+      margin-right: 6px;
+      font-weight: bold;
+    }
+
+    /* Reveal text shown briefly when a duck is shot */
+    .reveal-text {
+      position: fixed;
+      z-index: 600;
+      font-family: 'Impact', 'Arial Black', sans-serif;
+      font-size: 36px;
+      font-weight: bold;
+      color: #fff;
+      text-shadow: 2px 2px 6px #000, 0 0 12px #ff0000;
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+      transition: opacity 1.4s ease, transform 1.4s ease;
+      opacity: 1;
+      white-space: nowrap;
+    }
+    .reveal-text.fade {
+      opacity: 0;
+      transform: translate(-50%, -100%);
+    }
+
+    /* ---------- Victory screen ---------- */
+    #victory-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 1100;
+      background: rgba(0,0,0,0.85);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      text-align: center;
+      padding: 40px 20px;
+      box-sizing: border-box;
+    }
+    #victory-screen .trophy {
+      font-size: 72px;
+      margin-bottom: 8px;
+    }
+    #victory-screen h2 {
+      margin: 0 0 8px;
+      font-size: 28px;
+      opacity: 0.9;
+      letter-spacing: 2px;
+    }
+    #winner-name {
+      font-family: 'Impact', 'Arial Black', sans-serif;
+      font-size: 72px;
+      color: #ffcc00;
+      margin: 0 0 24px;
+      text-shadow: 3px 3px 0 #000;
+      word-break: break-word;
+      max-width: 90vw;
     }
   </style>
   <script src="duckhunt.js"></script>
 </head>
 <body>
+
+<div id="setup-screen">
+  <div class="panel">
+    <h1>Duck Hunt: <span class="accent">Elimination Mode</span></h1>
+    <p class="subtitle">Paste names, one per line. Each duck is secretly assigned a name. When a duck is shot, that person is eliminated. Last name standing wins.</p>
+
+    <label for="names-input">Names (3 minimum)</label>
+    <textarea id="names-input" placeholder="Enter names, one per line (3+ needed)
+Alice
+Bob
+Charlie
+Diana"></textarea>
+
+    <div id="name-count">0 valid names</div>
+
+    <div class="options-row">
+      <label><input type="checkbox" id="shuffle-checkbox" checked> Shuffle names</label>
+      <label>Ducks per wave: <input type="number" id="ducks-per-wave" min="1" max="6" value="3" style="width: 50px; padding: 4px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.4); color: #fff;"></label>
+    </div>
+
+    <div class="button-row">
+      <button id="start-elimination-btn" class="btn btn-primary" disabled>Start Elimination</button>
+      <button id="play-classic-btn" class="btn btn-secondary">Play Classic</button>
+    </div>
+
+    <div class="design-note">
+      Tip: missed ducks fly away — those names <strong>survive</strong> the round and stay in the pool. Only shot ducks are eliminated.
+    </div>
+  </div>
+</div>
+
+<div id="elimination-panel">
+  <h3>Elimination</h3>
+  <div id="survivors-count">— remaining</div>
+  <ol id="eliminated-list"></ol>
+</div>
+
+<div id="victory-screen">
+  <div class="trophy">🏆</div>
+  <h2>WINNER</h2>
+  <div id="winner-name"></div>
+  <div class="button-row">
+    <button id="restart-same-btn" class="btn btn-primary">Restart with same list</button>
+    <button id="restart-new-btn" class="btn btn-secondary">Restart with new list</button>
+  </div>
+</div>
+
 </body>
 </html>

@@ -5,6 +5,7 @@ import Stage from './Stage';
 import sound from './Sound';
 import levelCreator from '../libs/levelCreator.js';
 import utils from '../libs/utils';
+import EliminationUI from './EliminationUI';
 
 const BLUE_SKY_COLOR = 0x64b0ff;
 const PINK_SKY_COLOR = 0xfbb4d4;
@@ -34,7 +35,32 @@ class Game {
 
     this.waveEnding = false;
     this.quackingSoundId = null;
-    this.levels = levels.normal;
+
+    // ----- Elimination Mode wiring -----
+    this.mode = opts.mode || 'classic';
+    this.isElimination = this.mode === 'elimination';
+    if (this.isElimination) {
+      // survivorPool: live names that have not yet been eliminated. Mutated as ducks are shot.
+      this.survivorPool = (opts.names || []).slice();
+      this.totalNames = this.survivorPool.length;
+      this.ducksPerWave = Math.max(1, Math.min(6, opts.ducksPerWave || 3));
+      this.eliminationUI = null; // created in onLoad after DOM ready
+      // Override the level list with a single synthetic "Elimination" level. We run forever
+      // (well — until the survivor pool is down to 1) by re-starting waves manually.
+      this.levels = [{
+        id: 'elim',
+        title: 'Elimination',
+        waves: 9999, // effectively unbounded; the survivor check ends the round
+        ducks: this.ducksPerWave,
+        pointsPerDuck: 100,
+        speed: 5,
+        bullets: this.ducksPerWave + 2,
+        radius: 60,
+        time: 15
+      }];
+    } else {
+      this.levels = levels.normal;
+    }
     return this;
   }
 
@@ -259,6 +285,12 @@ class Game {
     this.addMuteLink();
     this.addFullscreenLink();
     this.bindEvents();
+
+    if (this.isElimination) {
+      this.eliminationUI = new EliminationUI();
+      this.eliminationUI.init(this.totalNames);
+    }
+
     this.startLevel();
     this.animate();
 
@@ -418,6 +450,12 @@ class Game {
   }
 
   startWave() {
+    // In elimination mode: if only one survivor is left, we're done — declare victory.
+    if (this.isElimination && this.survivorPool.length <= 1) {
+      this.eliminationWin();
+      return;
+    }
+
     this.quackingSoundId = sound.play('quacking');
     this.wave += 1;
     this.waveStartTime = Date.now();
@@ -425,7 +463,20 @@ class Game {
     this.ducksShotThisWave = 0;
     this.waveEnding = false;
 
-    this.stage.addDucks(this.level.ducks, this.level.speed);
+    let assignedNames;
+    let numDucks = this.level.ducks;
+    if (this.isElimination) {
+      // Pull up to ducksPerWave names off the front of the pool. These ducks are now "in play."
+      // The names stay in survivorPool — they're only removed if shot. If they escape, they
+      // get rotated to the back of the pool in endWave().
+      numDucks = Math.min(this.ducksPerWave, this.survivorPool.length);
+      assignedNames = this.survivorPool.slice(0, numDucks);
+      this.currentWaveNames = assignedNames.slice(); // remember for end-of-wave reconciliation
+      // Adjust bullets to give the player a fair shot at all of them
+      this.bullets = numDucks + 2;
+    }
+
+    this.stage.addDucks(numDucks, this.level.speed, assignedNames);
   }
 
   endWave() {
@@ -433,7 +484,16 @@ class Game {
     this.bullets = 0;
     sound.stop(this.quackingSoundId);
     if (this.stage.ducksAlive()) {
-      this.ducksMissed += this.level.ducks - this.ducksShotThisWave;
+      const waveDuckCount = this.isElimination && this.currentWaveNames
+        ? this.currentWaveNames.length
+        : this.level.ducks;
+      this.ducksMissed += Math.max(0, waveDuckCount - this.ducksShotThisWave);
+      // Elimination mode: any duck that's still alive at wave end "escaped" — that name SURVIVES
+      // this round and goes back to the pool. Rotate them to the back so we don't deal them
+      // the same hand next wave.
+      if (this.isElimination) {
+        this.recycleEscapedNames();
+      }
       this.renderer.background.color = PINK_SKY_COLOR;
       this.stage.flyAway().then(this.goToNextWave.bind(this));
     } else {
@@ -442,12 +502,43 @@ class Game {
     }
   }
 
+  /**
+   * Elimination-only: any names whose ducks escaped get rotated to the back of survivorPool.
+   * Called before flyAway() so we capture the names while ducks still exist on the stage.
+   */
+  recycleEscapedNames() {
+    const escaped = this.stage.escapedNames();
+    if (!escaped.length) return;
+    // Names in survivorPool that match escaped: move them to the end (preserve relative order)
+    this.survivorPool = this.survivorPool.filter((n) => !escaped.includes(n)).concat(escaped);
+  }
+
   goToNextWave() {
     this.renderer.background.color = BLUE_SKY_COLOR;
+    if (this.isElimination) {
+      // In elimination, the only end condition is "1 survivor left." Otherwise, next wave.
+      if (this.survivorPool.length <= 1) {
+        this.eliminationWin();
+      } else {
+        this.startWave();
+      }
+      return;
+    }
     if (this.level.waves === this.wave) {
       this.endLevel();
     } else {
       this.startWave();
+    }
+  }
+
+  /**
+   * Elimination mode victory: last name standing wins. Shows the victory overlay.
+   */
+  eliminationWin() {
+    const winner = this.survivorPool[0] || '(no one?)';
+    sound.play('champ');
+    if (this.eliminationUI) {
+      this.eliminationUI.showVictory(winner);
     }
   }
 
@@ -580,7 +671,24 @@ class Game {
     if (!this.stage.hud.replayButton && !this.outOfAmmo() && !this.shouldWaveEnd() && !this.paused) {
       sound.play('gunSound');
       this.bullets -= 1;
-      this.updateScore(this.stage.shotsFired(clickPoint, this.level.radius));
+      const result = this.stage.shotsFired(clickPoint, this.level.radius);
+      this.updateScore(result.ducksShot);
+      // Elimination mode: any duck shot now reveals its assigned name and exits the survivor pool.
+      if (this.isElimination && result.eliminatedHits && result.eliminatedHits.length) {
+        for (const hit of result.eliminatedHits) {
+          // remove from pool
+          const idx = this.survivorPool.indexOf(hit.name);
+          if (idx !== -1) this.survivorPool.splice(idx, 1);
+          if (this.eliminationUI) {
+            this.eliminationUI.eliminate(hit.name, hit.screenPos, this.survivorPool.length);
+          }
+        }
+        // If that shot left only one name alive, end the round now.
+        if (this.survivorPool.length <= 1) {
+          // Let the death animation play briefly, then declare the winner
+          setTimeout(() => this.eliminationWin(), 1200);
+        }
+      }
       return;
     }
 

@@ -57,6 +57,8 @@ class Duck extends Character {
     this.alive = true;
     this.visible = true;
     this.options = options;
+    // Elimination mode: each duck carries an assigned name. Hidden until shot.
+    this.assignedName = options.assignedName || null;
     this.anchor.set(0.5, 0.5);
   }
 

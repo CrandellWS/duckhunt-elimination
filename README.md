@@ -1,6 +1,32 @@
-# DUCK HUNT JS v3.0
+# Duck Hunt: Elimination Mode
 
-[Play the game](https://duckhuntjs.com)
+A fork of [MattSurabian/DuckHunt-JS](https://github.com/MattSurabian/DuckHunt-JS) with a "last duck standing" elimination mode for stream giveaways and chat rooms.
+
+## How elimination mode works
+
+1. On the setup screen, paste a list of names (one per line, 3+ required).
+2. Each duck that spawns is secretly assigned a name. Names are **hidden** while ducks fly.
+3. Shot a duck → its name is revealed and that person is eliminated. **Missed ducks survive** the round and stay in the pool.
+4. Game cycles waves until exactly one name remains — that's the winner.
+
+The original classic mode is still available via the "Play Classic" button on the setup screen.
+
+## Deploy to GitHub Pages
+
+This repo includes a workflow at `.github/workflows/pages.yml` that builds and publishes the game to GitHub Pages on every push to `main`/`master`.
+
+One-time setup after pushing:
+1. GitHub → repo Settings → Pages → **Source: GitHub Actions**
+2. Push to `main`. The workflow builds with webpack and publishes `dist/` to Pages.
+3. The game will be live at `https://<your-user>.github.io/<repo-name>/`.
+
+You can also run the workflow manually from the Actions tab (`workflow_dispatch`).
+
+---
+
+## Original DuckHunt-JS README
+
+[Play the original game](https://duckhuntjs.com)
 
 This is an implementation of DuckHunt in Javascript and HTML5. It uses the PixiJS rendering engine, Green Sock Animations, Howler, and Bluebird Promises.
 

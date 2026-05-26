@@ -188,8 +188,10 @@ class Stage extends Container {
    * Helper method that adds ducks to the container and causes them to fly around randomly.
    * @param {Number} numDucks - How many ducks to add to the stage
    * @param {Number} speed - Value from 0 (slow) to 10 (fast) that determines how fast the ducks will fly
+   * @param {Array<String>} [assignedNames] - Optional. In elimination mode, one name per duck. The name
+   *                                         is hidden visually but stored on the duck; revealed on shot.
    */
-  addDucks(numDucks, speed) {
+  addDucks(numDucks, speed, assignedNames) {
     for (let i = 0; i < numDucks; i++) {
       const duckColor = i % 2 === 0 ? 'red' : 'black';
 
@@ -198,7 +200,8 @@ class Stage extends Container {
         spritesheet: this.spritesheet,
         colorProfile: duckColor,
         maxX: MAX_X,
-        maxY: MAX_Y
+        maxY: MAX_Y,
+        assignedName: (assignedNames && assignedNames[i]) || null
       });
       newDuck.position.set(DUCK_POINTS.ORIGIN.x, DUCK_POINTS.ORIGIN.y);
       this.addChildAt(newDuck, 0);
@@ -226,10 +229,21 @@ class Stage extends Container {
     }, FLASH_MS);
 
     let ducksShot = 0;
+    const eliminatedHits = [];
     for (let i = 0; i < this.ducks.length; i++) {
       const duck = this.ducks[i];
       if (duck.alive && Utils.pointDistance(duck.position, this.getScaledClickLocation(clickPoint)) < radius) {
         ducksShot++;
+        // Capture the duck's name + screen position BEFORE shot() animates it offscreen.
+        if (duck.assignedName) {
+          eliminatedHits.push({
+            name: duck.assignedName,
+            screenPos: {
+              x: duck.position.x * this.scale.x,
+              y: duck.position.y * this.scale.y
+            }
+          });
+        }
         duck.shot();
         duck.timeline.call(() => {
           if (!this.isLocked()) {
@@ -238,7 +252,9 @@ class Stage extends Container {
         });
       }
     }
-    return ducksShot;
+    // Backwards-compatible: callers that expected a number still get the count
+    // via .ducksShot, but the new object form gives elimination mode what it needs.
+    return { ducksShot, eliminatedHits };
   }
 
   clickedReplay(clickPoint) {
@@ -303,6 +319,24 @@ class Stage extends Container {
     }
 
     return BPromise.all(duckPromises).then(this.cleanUpDucks.bind(this)).then(this.unlock.bind(this));
+  }
+
+  /**
+   * escapedNames
+   * Elimination mode helper: returns the assigned names of any ducks that are still alive
+   * (i.e. about to fly away or already flying away). These names should be returned to the
+   * survivor pool by the caller.
+   * @returns {Array<String>}
+   */
+  escapedNames() {
+    const names = [];
+    for (let i = 0; i < this.ducks.length; i++) {
+      const d = this.ducks[i];
+      if (d.alive && d.assignedName) {
+        names.push(d.assignedName);
+      }
+    }
+    return names;
   }
 
   /**
