@@ -80,7 +80,7 @@ function initSetupScreen() {
     let names = parseNames(textarea.value);
     if (names.length < 3) return;
     if (shuffleCb.checked) names = shuffle(names);
-    const ducksPerWave = Math.max(1, Math.min(6, parseInt(ducksInput.value, 10) || 3));
+    const ducksPerWave = Math.max(1, Math.min(100, parseInt(ducksInput.value, 10) || 3));
     bootGame({ mode: 'elimination', names, ducksPerWave });
   });
 

@@ -43,7 +43,7 @@ class Game {
       // survivorPool: live names that have not yet been eliminated. Mutated as ducks are shot.
       this.survivorPool = (opts.names || []).slice();
       this.totalNames = this.survivorPool.length;
-      this.ducksPerWave = Math.max(1, Math.min(6, opts.ducksPerWave || 3));
+      this.ducksPerWave = Math.max(1, Math.min(100, opts.ducksPerWave || 3));
       this.eliminationUI = null; // created in onLoad after DOM ready
       // Override the level list with a single synthetic "Elimination" level. We run forever
       // (well — until the survivor pool is down to 1) by re-starting waves manually.
