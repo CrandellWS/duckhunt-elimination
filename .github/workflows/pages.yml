@@ -27,9 +27,13 @@ jobs:
 
       - run: npm ci
 
+      # ffmpeg is required by vendor/audiosprite.js. ubuntu-latest no longer
+      # ships it in all images, so install it explicitly.
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
       # Rebake the audio sprite from src/assets/sounds so any uploaded sound
       # file (e.g. gunSound.mp3) actually makes it into the deployed game.
-      # ubuntu-latest already has ffmpeg installed.
       - run: npx gulp audio
 
       - run: npx webpack --mode production
