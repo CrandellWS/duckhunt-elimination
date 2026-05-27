@@ -27,6 +27,11 @@ jobs:
 
       - run: npm ci
 
+      # Rebake the audio sprite from src/assets/sounds so any uploaded sound
+      # file (e.g. gunSound.mp3) actually makes it into the deployed game.
+      # ubuntu-latest already has ffmpeg installed.
+      - run: npx gulp audio
+
       - run: npx webpack --mode production
 
       - uses: actions/configure-pages@v5
